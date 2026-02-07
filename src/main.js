@@ -15,7 +15,6 @@ class MainMenu extends Phaser.Scene {
 
     create() {
         const { width, height } = this.scale;
-        
         this.bg = this.add.tileSprite(width/2, height/2, width, height, 'bg').setTint(0x666666);
         
         const title = this.add.text(width/2, height * 0.2, 'ARIES', {
@@ -28,13 +27,10 @@ class MainMenu extends Phaser.Scene {
             fontSize: '24px', fontFamily: 'monospace', color: '#00ffff'
         }).setOrigin(0.5);
 
-        // --- INSTRUCTIONS ---
         const guideY = height * 0.55;
         this.add.rectangle(width/2, guideY + 20, 2, 120, 0x00ffff, 0.3);
-
         this.add.text(width * 0.25, guideY - 30, 'TAP LEFT', { fontSize: '20px', fontFamily: 'monospace', color: '#00ffff' }).setOrigin(0.5);
         this.add.text(width * 0.25, guideY + 10, 'JUMP', { fontSize: '32px', fontFamily: 'Arial Black', color: '#ffffff' }).setOrigin(0.5);
-
         this.add.text(width * 0.75, guideY - 30, 'TAP RIGHT', { fontSize: '20px', fontFamily: 'monospace', color: '#ff0055' }).setOrigin(0.5);
         this.add.text(width * 0.75, guideY + 10, 'ATTACK', { fontSize: '32px', fontFamily: 'Arial Black', color: '#ffffff' }).setOrigin(0.5);
 
@@ -54,7 +50,7 @@ class GameScene extends Phaser.Scene {
     create() {
         const { width, height } = this.scale;
 
-        // 1. SETUP AUDIO
+        // Audio
         if (!this.sound.get('music')) {
             this.music = this.sound.add('music', { loop: true, volume: 0.5 });
             this.music.play();
@@ -62,37 +58,45 @@ class GameScene extends Phaser.Scene {
         this.jumpSound = this.sound.add('jump', { volume: 0.4 });
         this.boomSound = this.sound.add('boom', { volume: 0.6 });
 
-        // 2. WORLD
+        // World
         this.bg = this.add.tileSprite(width/2, height/2, width, height, 'bg').setScrollFactor(0);
-        
         if (this.cameras.main.postFX) {
             this.cameras.main.postFX.addBloom(0xffffff, 0.6, 0.6, 1.2, 1.0);
             this.cameras.main.postFX.addVignette(0.5, 0.5, 0.9);
         }
 
-        // 3. THE HERO
+        // --- HERO SURGERY (Fixing the Float) ---
         this.player = this.physics.add.sprite(200, 300, 'hero');
         this.player.setScale(0.15); 
-        this.player.body.setCircle(this.player.width * 0.3, this.player.width * 0.2, this.player.height * 0.2);
         this.player.setGravityY(1400);
         this.player.setDepth(10);
+
+        // 1. Shrink the Physics Box to be smaller than the image (Cut off empty space)
+        // We make the box 40% width and 60% height of the full image
+        this.player.body.setSize(this.player.width * 0.4, this.player.height * 0.6);
         
-        // Trail - Offset to come from his back
+        // 2. Offset the box to align with the center/bottom of the sprite
+        this.player.body.setOffset(this.player.width * 0.3, this.player.height * 0.3);
+
+        // Trail Effect
         this.add.particles(0, 0, 'hero', {
             speed: 10, scale: { start: 0.15, end: 0 }, alpha: { start: 0.3, end: 0 },
             lifespan: 200, blendMode: 'ADD', follow: this.player,
             followOffset: { x: -20, y: 0 } 
         }).setDepth(9);
 
-        // 4. GROUPS
+        // Groups
         this.platforms = this.physics.add.staticGroup();
         this.spikes = this.physics.add.staticGroup();
 
         this.nextPlatformX = 0;
         for(let i=0; i<15; i++) this.spawnPlatform(false);
 
-        // 5. COLLISIONS
-        this.physics.add.collider(this.player, this.platforms, () => { this.jumps = 0; });
+        // Collisions
+        this.physics.add.collider(this.player, this.platforms, () => { 
+            this.jumps = 0; 
+            this.isFlipping = false; // Stop flipping on land
+        });
         
         this.physics.add.overlap(this.player, this.spikes, (player, spike) => {
             if (this.isDashing) {
@@ -107,13 +111,13 @@ class GameScene extends Phaser.Scene {
             }
         });
 
-        // 6. CONTROLS
+        // Controls
         this.input.on('pointerdown', (pointer) => {
             if (pointer.x < width / 2) this.jump();
             else this.dash();
         });
 
-        // 7. CAMERA & SPEED
+        // Camera
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
         this.cameras.main.setFollowOffset(-200, 150);
 
@@ -124,9 +128,21 @@ class GameScene extends Phaser.Scene {
         this.jumps = 0;
         this.isDashing = false;
         this.isDead = false;
+        this.isFlipping = false;
         this.score = 0;
         this.gameSpeed = 400;
         this.speedLevel = 0;
+
+        // --- RUNNING ANIMATION (Squash & Stretch) ---
+        // This makes him "breath" while running
+        this.tweens.add({
+            targets: this.player,
+            scaleY: 0.14, // Squish down slightly (from 0.15)
+            scaleX: 0.16, // Stretch wide slightly
+            duration: 150,
+            yoyo: true,
+            repeat: -1
+        });
     }
 
     spawnPlatform(canHaveSpikes) {
@@ -152,14 +168,15 @@ class GameScene extends Phaser.Scene {
             this.jumps++;
             this.jumpSound.play();
             
-            // --- ANIMATION: THE FLIP ---
+            // --- FLIP LOGIC ---
             if (this.jumps === 2) {
-                // Double Jump = Front Flip
+                this.isFlipping = true;
                 this.tweens.add({
                     targets: this.player,
                     angle: 360,
                     duration: 600,
-                    ease: 'Cubic.easeOut'
+                    ease: 'Cubic.easeOut',
+                    onComplete: () => { this.player.setAngle(0); } // Reset after flip
                 });
             }
         }
@@ -173,7 +190,7 @@ class GameScene extends Phaser.Scene {
             this.jumpSound.play({ rate: 1.5 });
             this.cameras.main.flash(50, 0, 255, 255);
             
-            // Lean forward into the dash
+            // Dash Pose
             this.tweens.add({ targets: this.player, angle: 20, duration: 100, yoyo: true });
 
             this.time.delayedCall(250, () => {
@@ -197,25 +214,18 @@ class GameScene extends Phaser.Scene {
 
         if (!this.isDashing) this.player.setVelocityX(this.gameSpeed);
         
-        // --- PROCEDURAL ANIMATION LOOP ---
-        if (this.player.body.touching.down) {
-            // RUNNING: Bob up and down lightly
-            this.player.setAngle(0); // Reset angle
-            this.player.y += Math.sin(this.time.now / 100) * 0.5;
-        } else {
-            // AIRBORNE: Tilt based on velocity
-            if (this.jumps < 2) { // Don't override the flip
-                if (this.player.body.velocity.y < 0) {
-                    this.player.setAngle(-15); // Tilt up (Jumping)
-                } else {
-                    this.player.setAngle(10);  // Tilt down (Falling)
-                }
+        // --- ANIMATION CONTROLLER ---
+        if (!this.isFlipping) {
+            if (this.player.body.touching.down) {
+                this.player.setAngle(0); // Run straight
+            } else {
+                // Lean into jump/fall
+                if (this.player.body.velocity.y < 0) this.player.setAngle(-15);
+                else this.player.setAngle(10);
             }
         }
-        // ---------------------------------
 
         this.bg.tilePositionX = this.cameras.main.scrollX * 0.5;
-
         if (this.player.x > this.nextPlatformX - 1500) this.spawnPlatform(true);
 
         const totalScore = currentDistance + this.score;
@@ -242,14 +252,14 @@ class GameScene extends Phaser.Scene {
     }
 }
 
-// --- CONFIG ---
+// CONFIG
 const config = {
     type: Phaser.AUTO,
     width: window.innerWidth,
     height: window.innerHeight,
     backgroundColor: '#000000',
     scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH },
-    physics: { default: 'arcade', arcade: { gravity: { y: 1400 }, debug: false } },
+    physics: { default: 'arcade', arcade: { gravity: { y: 1400 }, debug: false } }, // Set debug: true to see the red box if still floating!
     scene: [MainMenu, GameScene]
 };
 const game = new Phaser.Game(config);
