@@ -1,77 +1,111 @@
-// The Game Configuration
 const config = {
-    type: Phaser.AUTO, // Uses WebGL if available, falls back to Canvas
+    type: Phaser.AUTO,
     width: window.innerWidth,
     height: window.innerHeight,
-    backgroundColor: '#1a1a2e', // A moody dark blue-purple
+    backgroundColor: '#050505',
     physics: {
         default: 'arcade',
-        arcade: {
-            gravity: { y: 900 }, // High gravity for snappy jumps
-            debug: false
-        }
+        arcade: { gravity: { y: 1200 }, debug: false }
     },
-    scene: {
-        preload: preload,
-        create: create,
-        update: update
-    }
+    scene: { preload, create, update }
 };
 
-// Initialize the Game
 const game = new Phaser.Game(config);
 
-// VARIABLES
 let player;
 let platforms;
 let cursors;
+let jumpCount = 0;
 
-// 1. PRELOAD (Load assets)
-function preload() {
-    // We will load real images later. For now, we generate graphics via code.
-}
+function preload() {}
 
-// 2. CREATE (Setup the scene)
 function create() {
-    // Create a floor
+    // 1. MAKE GRAPHICS (Procedural Textures)
+    const graphics = this.make.graphics({ x: 0, y: 0, add: false });
+    
+    // Player Texture (Glowing Diamond)
+    graphics.fillStyle(0xffffff, 1);
+    graphics.fillCircle(10, 10, 10);
+    graphics.generateTexture('playerTex', 20, 20);
+    
+    // Particle Texture (Soft Glow)
+    graphics.clear();
+    graphics.fillStyle(0x00ffff, 1);
+    graphics.fillCircle(4, 4, 4);
+    graphics.generateTexture('particleTex', 8, 8);
+
+    // 2. WORLD
     platforms = this.physics.add.staticGroup();
-    let ground = this.add.rectangle(config.width/2, config.height - 50, config.width, 60, 0x0f3460).setOrigin(0.5);
-    this.physics.add.existing(ground, true); // true = static (doesn't move)
+    // A floor that looks like a neon line
+    let ground = this.add.rectangle(config.width/2, config.height - 20, config.width, 40, 0x00ffff).setOrigin(0.5);
+    this.physics.add.existing(ground, true);
     platforms.add(ground);
 
-    // Create the Player (Aries) - A glowing white box for now
-    player = this.add.rectangle(100, 450, 40, 40, 0xffffff);
-    this.physics.add.existing(player);
-    
-    // Physics properties for the player
-    player.body.setBounce(0.1);
-    player.body.setCollideWorldBounds(true);
+    // Background Dust Particles
+    const dust = this.add.particles(0, 0, 'particleTex', {
+        x: { min: 0, max: config.width },
+        y: { min: 0, max: config.height },
+        quantity: 50,
+        lifespan: 4000,
+        gravityY: -10,
+        scale: { start: 0.2, end: 0 },
+        alpha: { start: 0.5, end: 0 },
+        blendMode: 'ADD'
+    });
 
-    // Add collision between player and floor
-    this.physics.add.collider(player, platforms);
-
-    // Add a simple "Glow" effect (The Cinematic Touch)
-    player.postFX = player.postFX || {}; // Safety check
-    // Note: FX might not show on all mobile browsers yet, but we'll try basic tint first.
+    // 3. PLAYER (ARIES)
+    player = this.physics.add.sprite(100, 450, 'playerTex');
+    player.setBounce(0.0);
+    player.setCollideWorldBounds(true);
     
-    // Controls (Touch + Keyboard)
+    // The Trail (Cinematic Effect)
+    const trail = this.add.particles(0, 0, 'particleTex', {
+        speed: 20,
+        scale: { start: 1, end: 0 },
+        alpha: { start: 0.5, end: 0 },
+        lifespan: 400,
+        blendMode: 'ADD',
+        follow: player
+    });
+
+    this.physics.add.collider(player, platforms, () => {
+        jumpCount = 0; 
+    });
+
     cursors = this.input.keyboard.createCursorKeys();
-    
-    // Text to prove it works
-    this.add.text(config.width/2, 100, 'ARIES: SYSTEM ONLINE', { 
-        fontSize: '32px', 
-        fill: '#e94560',
-        fontFamily: 'monospace'
-    }).setOrigin(0.5);
+
+    // 4. GUI
+    this.add.text(20, 20, 'ARIES: VISUAL UPGRADE', { 
+        fontSize: '20px', 
+        color: '#00ffff',
+        fontFamily: 'monospace' 
+    });
 }
 
-// 3. UPDATE (The game loop - runs 60 times per second)
 function update() {
-    // Simple Jump Logic
-    const touchingDown = player.body.touching.down || player.body.onFloor();
+    const isTouchingDown = player.body.touching.down;
 
-    // Jump on Tap or Space
-    if ((this.input.activePointer.isDown || cursors.up.isDown) && touchingDown) {
-        player.body.setVelocityY(-500);
+    // Auto-Run Effect (The world moves, player stays)
+    // We will simulate speed later, for now just controls.
+
+    // Jump Logic (Double Jump enabled)
+    if (Phaser.Input.Keyboard.JustDown(cursors.up) || this.input.activePointer.isDown) {
+        // Reset pointer to prevent machine-gun jumping on touch
+        this.input.activePointer.isDown = false; 
+
+        if (isTouchingDown || jumpCount < 2) {
+            player.setVelocityY(-600);
+            jumpCount++;
+            
+            // "Squash" animation on jump
+            this.tweens.add({
+                targets: player,
+                scaleX: 0.6,
+                scaleY: 1.4,
+                duration: 100,
+                yoyo: true
+            });
+        }
     }
 }
+
