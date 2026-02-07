@@ -3,10 +3,9 @@ class MainMenu extends Phaser.Scene {
     constructor() { super('MainMenu'); }
 
     preload() {
-        // LOADING BAR
+        // LOADING TEXT
         const width = this.cameras.main.width;
         const height = this.cameras.main.height;
-        
         const loadingText = this.make.text({
             x: width / 2, y: height / 2,
             text: 'LOADING...',
@@ -32,7 +31,7 @@ class MainMenu extends Phaser.Scene {
     create() {
         const { width, height } = this.scale;
         
-        // Background (Tinted Dark)
+        // Background
         this.bg = this.add.tileSprite(width/2, height/2, width, height, 'bg').setTint(0x444444);
         
         // Title
@@ -47,15 +46,13 @@ class MainMenu extends Phaser.Scene {
             fontSize: '32px', fontFamily: 'monospace', color: '#00ffff'
         }).setOrigin(0.5);
 
-        // Visual Guide (Line)
+        // Visual Guide
         this.add.rectangle(width/2, height * 0.6, 4, 150, 0x00ffff, 0.3);
 
-        // CONTROLS TEXT (Standardized for 720p)
-        // LEFT
+        // CONTROLS TEXT
         this.add.text(width * 0.25, height * 0.55, 'LEFT SIDE / SPACE', { fontSize: '24px', fontFamily: 'monospace', color: '#00ffff' }).setOrigin(0.5);
         this.add.text(width * 0.25, height * 0.65, 'JUMP', { fontSize: '60px', fontFamily: 'Arial Black', color: '#ffffff' }).setOrigin(0.5);
 
-        // RIGHT
         this.add.text(width * 0.75, height * 0.55, 'RIGHT SIDE / D', { fontSize: '24px', fontFamily: 'monospace', color: '#ff0055' }).setOrigin(0.5);
         this.add.text(width * 0.75, height * 0.65, 'ATTACK', { fontSize: '60px', fontFamily: 'Arial Black', color: '#ffffff' }).setOrigin(0.5);
 
@@ -79,7 +76,6 @@ class GameScene extends Phaser.Scene {
     create() {
         const { width, height } = this.scale;
 
-        // Audio
         if (!this.sound.get('music')) {
             this.music = this.sound.add('music', { loop: true, volume: 0.5 });
             this.music.play();
@@ -87,30 +83,25 @@ class GameScene extends Phaser.Scene {
         this.jumpSound = this.sound.add('jump', { volume: 0.4 });
         this.boomSound = this.sound.add('boom', { volume: 0.6 });
 
-        // World
         this.bg = this.add.tileSprite(width/2, height/2, width, height, 'bg').setScrollFactor(0);
-        // Bloom (Standardized)
         if (this.cameras.main.postFX) {
             this.cameras.main.postFX.addBloom(0xffffff, 0.6, 0.6, 1.2, 1.0);
             this.cameras.main.postFX.addVignette(0.5, 0.5, 0.9);
         }
 
-        // HERO (Safe Spawn at Y=100)
+        // Hero
         this.player = this.physics.add.sprite(200, 100, 'hero');
         this.player.setScale(0.15); 
         this.player.setGravityY(1400);
         this.player.setDepth(10);
-        // Hitbox Polish
         this.player.body.setSize(this.player.width * 0.4, this.player.height * 0.5);
         this.player.body.setOffset(this.player.width * 0.3, this.player.height * 0.25);
 
-        // Trail
         this.trail = this.add.particles(0, 0, 'hero', {
             speed: 10, scale: { start: 0.15, end: 0 }, alpha: { start: 0.3, end: 0 },
             lifespan: 200, blendMode: 'ADD', follow: this.player, followOffset: { x: -20, y: 0 } 
         }).setDepth(9);
 
-        // Dust
         const dustGfx = this.make.graphics({x:0, y:0, add:false});
         dustGfx.fillStyle(0xffffff); dustGfx.fillCircle(4,4,4);
         dustGfx.generateTexture('dust', 8, 8);
@@ -120,15 +111,11 @@ class GameScene extends Phaser.Scene {
             lifespan: 300, gravityY: -100, emitting: false
         });
 
-        // Platforms (Standardized Floor Height)
         this.platforms = this.physics.add.staticGroup();
         this.spikes = this.physics.add.staticGroup();
         this.nextPlatformX = 0;
-        
-        // Generate initial floor
         for(let i=0; i<20; i++) this.spawnPlatform(false);
 
-        // Collisions
         this.physics.add.collider(this.player, this.platforms, () => { 
             this.jumps = 0; this.isFlipping = false;
         });
@@ -146,7 +133,7 @@ class GameScene extends Phaser.Scene {
             }
         });
 
-        // CONTROLS
+        // Controls
         this.input.on('pointerdown', (pointer) => {
             if (this.isDead) return;
             if (pointer.x < width / 2) this.jump();
@@ -158,16 +145,13 @@ class GameScene extends Phaser.Scene {
         this.input.keyboard.on('keydown-D', () => this.dash());
         this.input.keyboard.on('keydown-RIGHT', () => this.dash());
 
-        // CAMERA (Fixed Offset for 720p)
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
-        this.cameras.main.setFollowOffset(-300, 100); // Tuned for 720p
+        this.cameras.main.setFollowOffset(-300, 100);
 
-        // Score
         this.scoreText = this.add.text(50, 50, '0', {
             fontSize: '50px', fontFamily: 'Arial Black', color: '#ffffff'
         }).setScrollFactor(0).setDepth(20);
 
-        // Variables
         this.jumps = 0;
         this.isDashing = false;
         this.isDead = false;
@@ -176,14 +160,12 @@ class GameScene extends Phaser.Scene {
         this.gameSpeed = 400;
         this.speedLevel = 0;
 
-        // Run Anim
         this.tweens.add({
             targets: this.player, scaleY: 0.14, scaleX: 0.16, duration: 150, yoyo: true, repeat: -1
         });
     }
 
     spawnPlatform(canHaveSpikes) {
-        // Floor is always at height - 64
         const groundY = 720 - 64; 
         const ground = this.platforms.create(this.nextPlatformX, groundY, 'ground');
         ground.displayWidth = 125; ground.displayHeight = 100;
@@ -191,11 +173,9 @@ class GameScene extends Phaser.Scene {
 
         if (canHaveSpikes && Math.random() < 0.4) {
             const spikeX = this.nextPlatformX + Phaser.Math.Between(-30, 30);
-            // Spike sits on top of floor
             const spike = this.spikes.create(spikeX, groundY - 60, 'spike');
             spike.displayWidth = 60; spike.displayHeight = 60;
             spike.refreshBody(); spike.setDepth(10);
-            
             const glow = this.add.circle(spikeX, groundY - 50, 30, 0xff0000, 0.3);
             this.tweens.add({ targets: glow, alpha: 0.1, scale: 1.5, duration: 500, yoyo: true, repeat: -1 });
         }
@@ -235,7 +215,6 @@ class GameScene extends Phaser.Scene {
     update() {
         if (this.isDead) return;
 
-        // Speed
         const currentDistance = Math.floor(this.player.x / 100);
         const newSpeedLevel = Math.floor(currentDistance / 500);
         if (newSpeedLevel > this.speedLevel) {
@@ -245,7 +224,6 @@ class GameScene extends Phaser.Scene {
         }
         if (!this.isDashing) this.player.setVelocityX(this.gameSpeed);
         
-        // Posture
         if (!this.isFlipping) {
             if (this.player.body.touching.down) {
                 this.player.setAngle(0); 
@@ -256,21 +234,15 @@ class GameScene extends Phaser.Scene {
             }
         }
 
-        // Parallax
         this.bg.tilePositionX = this.cameras.main.scrollX * 0.5;
-        
-        // Generator
         if (this.player.x > this.nextPlatformX - 1500) this.spawnPlatform(true);
-        
-        // UI
         const totalScore = currentDistance + this.score;
         this.scoreText.setText(totalScore);
 
-        // Cleanup
         this.platforms.children.each(c => { if(c.x < this.player.x - 800) c.destroy(); });
         this.spikes.children.each(c => { if(c.x < this.player.x - 800) c.destroy(); });
         
-        if (this.player.y > 720 + 200) this.die(); // Fall check against fixed 720p height
+        if (this.player.y > 720 + 200) this.die(); 
     }
 
     die() {
@@ -279,7 +251,6 @@ class GameScene extends Phaser.Scene {
         this.physics.pause(); 
         this.boomSound.play(); 
         this.cameras.main.shake(500, 0.02);
-
         this.player.setVisible(false);
         this.trail.stop();
         
@@ -308,7 +279,7 @@ class GameOver extends Phaser.Scene {
     create(data) {
         const { width, height } = this.scale;
         this.add.rectangle(width/2, height/2, width, height, 0x000000).setAlpha(0.8);
-
+        
         this.add.text(width/2, height * 0.3, 'SYSTEM FAILURE', {
             fontSize: '70px', fontFamily: 'Arial Black', color: '#ff0055'
         }).setOrigin(0.5).setPostPipeline('BloomPostFX'); 
@@ -326,7 +297,6 @@ class GameOver extends Phaser.Scene {
         }).setOrigin(0.5);
         this.tweens.add({ targets: retryBtn, scale: 1.1, duration: 800, yoyo: true, repeat: -1 });
 
-        // Restart
         this.input.on('pointerdown', () => {
             this.scene.stop();
             this.scene.get('GameScene').scene.restart();
@@ -338,16 +308,52 @@ class GameOver extends Phaser.Scene {
     }
 }
 
-// --- CONFIG (FIXED RESOLUTION) ---
+// --- ROTATION CHECKER (THE FIX) ---
+// This runs outside the game loop to ensure it covers everything
+function checkOrientation() {
+    const warning = document.getElementById('orientation-warning');
+    if (window.innerHeight > window.innerWidth) {
+        // Portrait Mode
+        if (!warning) {
+            const div = document.createElement('div');
+            div.id = 'orientation-warning';
+            div.style.position = 'fixed';
+            div.style.top = '0';
+            div.style.left = '0';
+            div.style.width = '100%';
+            div.style.height = '100%';
+            div.style.backgroundColor = 'black';
+            div.style.color = 'white';
+            div.style.display = 'flex';
+            div.style.flexDirection = 'column';
+            div.style.justifyContent = 'center';
+            div.style.alignItems = 'center';
+            div.style.zIndex = '9999';
+            div.style.fontFamily = 'Arial, sans-serif';
+            div.innerHTML = '<h1 style="font-size: 50px;">⟳</h1><h2>PLEASE ROTATE DEVICE</h2>';
+            document.body.appendChild(div);
+        } else {
+            warning.style.display = 'flex';
+        }
+    } else {
+        // Landscape Mode
+        if (warning) warning.style.display = 'none';
+    }
+}
+
+// Listen for resizing
+window.addEventListener('resize', checkOrientation);
+// Check once on load
+checkOrientation();
+
+// CONFIG
 const config = {
     type: Phaser.AUTO,
-    // We FORCE the game to be 1280x720.
-    // The scale mode 'FIT' will shrink this to fit your phone screen perfectly.
     width: 1280,
     height: 720,
     backgroundColor: '#000000',
     scale: {
-        mode: Phaser.Scale.FIT, // This is the magic setting
+        mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH
     },
     physics: { default: 'arcade', arcade: { gravity: { y: 1400 }, debug: false } },
