@@ -3,6 +3,25 @@ class MainMenu extends Phaser.Scene {
     constructor() { super('MainMenu'); }
 
     preload() {
+        // --- NEW: LOADING SCREEN ---
+        const width = this.cameras.main.width;
+        const height = this.cameras.main.height;
+        
+        const loadingText = this.make.text({
+            x: width / 2, y: height / 2,
+            text: 'LOADING SYSTEM...',
+            style: { font: '20px monospace', fill: '#ffffff' }
+        }).setOrigin(0.5);
+
+        this.load.on('progress', (value) => {
+            loadingText.setText(`LOADING... ${parseInt(value * 100)}%`);
+        });
+
+        this.load.on('complete', () => {
+            loadingText.destroy();
+        });
+        // ---------------------------
+
         this.load.image('bg', 'bg.png');
         this.load.image('ground', 'ground.png');
         this.load.image('spike', 'spike.png');
@@ -17,8 +36,7 @@ class MainMenu extends Phaser.Scene {
         const { width, height } = this.scale;
         this.bg = this.add.tileSprite(width/2, height/2, width, height, 'bg').setTint(0x666666);
         
-        // --- RESPONSIVE SCALING ---
-        // We calculate a "scale factor" based on screen size
+        // Dynamic Scale Factor
         const s = Math.min(width / 800, height / 600); 
 
         const title = this.add.text(width/2, height * 0.25, 'ARIES', {
@@ -31,14 +49,13 @@ class MainMenu extends Phaser.Scene {
             fontSize: `${24 * s}px`, fontFamily: 'monospace', color: '#00ffff'
         }).setOrigin(0.5);
 
-        // Guide Visuals
         const guideY = height * 0.55;
         this.add.rectangle(width/2, guideY + 10, 2, 100 * s, 0x00ffff, 0.3);
 
-        // Responsive Text Sizes
-        const bigFont = `${32 * s}px`;
-        const smallFont = `${20 * s}px`;
+        const bigFont = `${Math.max(24, 32 * s)}px`;
+        const smallFont = `${Math.max(16, 20 * s)}px`;
 
+        // Controls Text (Mobile + PC)
         this.add.text(width * 0.25, guideY - 30 * s, 'LEFT / SPACE', { fontSize: smallFont, fontFamily: 'monospace', color: '#00ffff' }).setOrigin(0.5);
         this.add.text(width * 0.25, guideY + 10 * s, 'JUMP', { fontSize: bigFont, fontFamily: 'Arial Black', color: '#ffffff' }).setOrigin(0.5);
 
@@ -53,15 +70,15 @@ class MainMenu extends Phaser.Scene {
         // Inputs
         this.input.on('pointerdown', () => this.scene.start('GameScene'));
         this.input.keyboard.on('keydown-SPACE', () => this.scene.start('GameScene'));
-        
-        // --- ORIENTATION CHECK LOOP ---
+        this.input.keyboard.on('keydown-ENTER', () => this.scene.start('GameScene'));
+
+        // Rotation Check
         this.events.on('resize', this.checkOrientation, this);
         this.checkOrientation();
     }
 
     checkOrientation() {
         const { width, height } = this.scale;
-        // If height > width, we are likely on a phone in portrait
         if (height > width) {
             if (!this.warningGroup) {
                 this.warningGroup = this.add.container();
@@ -70,10 +87,10 @@ class MainMenu extends Phaser.Scene {
                     fontSize: '40px', fontFamily: 'Arial Black', color: '#ffffff', align: 'center'
                 }).setOrigin(0.5);
                 this.warningGroup.add([bg, txt]);
-                this.scene.pause(); // Pause the menu logic
+                this.scene.pause();
             }
             this.warningGroup.setVisible(true);
-            this.warningGroup.getAll()[0].setSize(width, height); // Resize bg
+            this.warningGroup.getAll()[0].setSize(width, height);
             this.warningGroup.getAll()[0].setPosition(width/2, height/2);
             this.warningGroup.getAll()[1].setPosition(width/2, height/2);
         } else {
@@ -92,7 +109,6 @@ class GameScene extends Phaser.Scene {
     create() {
         const { width, height } = this.scale;
 
-        // Audio
         if (!this.sound.get('music')) {
             this.music = this.sound.add('music', { loop: true, volume: 0.5 });
             this.music.play();
@@ -100,14 +116,12 @@ class GameScene extends Phaser.Scene {
         this.jumpSound = this.sound.add('jump', { volume: 0.4 });
         this.boomSound = this.sound.add('boom', { volume: 0.6 });
 
-        // World
         this.bg = this.add.tileSprite(width/2, height/2, width, height, 'bg').setScrollFactor(0);
         if (this.cameras.main.postFX) {
             this.cameras.main.postFX.addBloom(0xffffff, 0.6, 0.6, 1.2, 1.0);
             this.cameras.main.postFX.addVignette(0.5, 0.5, 0.9);
         }
 
-        // Hero
         this.player = this.physics.add.sprite(200, 300, 'hero');
         this.player.setScale(0.15); 
         this.player.setGravityY(1400);
@@ -115,7 +129,6 @@ class GameScene extends Phaser.Scene {
         this.player.body.setSize(this.player.width * 0.4, this.player.height * 0.5);
         this.player.body.setOffset(this.player.width * 0.3, this.player.height * 0.25);
 
-        // Particles
         this.trail = this.add.particles(0, 0, 'hero', {
             speed: 10, scale: { start: 0.15, end: 0 }, alpha: { start: 0.3, end: 0 },
             lifespan: 200, blendMode: 'ADD', follow: this.player, followOffset: { x: -20, y: 0 } 
@@ -124,21 +137,17 @@ class GameScene extends Phaser.Scene {
         const dustGfx = this.make.graphics({x:0, y:0, add:false});
         dustGfx.fillStyle(0xffffff); dustGfx.fillCircle(4,4,4);
         dustGfx.generateTexture('dust', 8, 8);
-
         this.dust = this.add.particles(0, 0, 'dust', {
             speed: { min: -100, max: 0 }, angle: { min: 180, max: 200 },
             scale: { start: 0.5, end: 0 }, alpha: { start: 0.5, end: 0 },
             lifespan: 300, gravityY: -100, emitting: false
         });
 
-        // Groups
         this.platforms = this.physics.add.staticGroup();
         this.spikes = this.physics.add.staticGroup();
-
         this.nextPlatformX = 0;
         for(let i=0; i<15; i++) this.spawnPlatform(false);
 
-        // Collisions
         this.physics.add.collider(this.player, this.platforms, () => { 
             this.jumps = 0; this.isFlipping = false;
         });
@@ -156,23 +165,28 @@ class GameScene extends Phaser.Scene {
             }
         });
 
-        // --- CONTROLS (PC + MOBILE) ---
-        // Touch
+        // --- CONTROLS ---
         this.input.on('pointerdown', (pointer) => {
             if (this.isDead) return;
+            // On mobile, simple tap logic
             if (pointer.x < width / 2) this.jump();
             else this.dash();
         });
 
-        // Keyboard
+        // PC KEYBOARD SUPPORT
         this.input.keyboard.on('keydown-SPACE', () => this.jump());
         this.input.keyboard.on('keydown-UP', () => this.jump());
+        this.input.keyboard.on('keydown-W', () => this.jump());
         this.input.keyboard.on('keydown-D', () => this.dash());
         this.input.keyboard.on('keydown-RIGHT', () => this.dash());
 
-        // Camera
+        // --- CAMERA FIX FOR MOBILE ---
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
-        this.cameras.main.setFollowOffset(-200, 150);
+        
+        // ** THE FIX **
+        // Instead of hardcoding 150px, we use a percentage of the screen height.
+        // On a 360px high phone, 0.1 = 36px offset. This keeps player centered.
+        this.cameras.main.setFollowOffset(-200, height * 0.1);
 
         this.scoreText = this.add.text(50, 50, '0', {
             fontSize: '40px', fontFamily: 'Arial Black', color: '#ffffff'
@@ -190,7 +204,6 @@ class GameScene extends Phaser.Scene {
             targets: this.player, scaleY: 0.14, scaleX: 0.16, duration: 150, yoyo: true, repeat: -1
         });
 
-        // Orientation Check Hook
         this.events.on('resize', this.checkOrientation, this);
         this.checkOrientation();
     }
@@ -198,10 +211,7 @@ class GameScene extends Phaser.Scene {
     checkOrientation() {
         const { width, height } = this.scale;
         if (height > width && !this.isDead) {
-            // Pause Game if rotated to portrait mid-game
             this.scene.pause();
-            // We can overlay a simple HTML div or just rely on the user understanding
-            // For now, let's keep it simple: Pause physics
             this.physics.pause();
         } else if (height < width && !this.isDead) {
             this.scene.resume();
@@ -296,7 +306,6 @@ class GameScene extends Phaser.Scene {
         this.physics.pause(); 
         this.boomSound.play(); 
         this.cameras.main.shake(500, 0.02);
-
         this.player.setVisible(false);
         this.trail.stop();
         
@@ -326,7 +335,6 @@ class GameOver extends Phaser.Scene {
         const { width, height } = this.scale;
         this.add.rectangle(width/2, height/2, width, height, 0x000000).setAlpha(0.8);
 
-        // Scaled text for Game Over
         const s = Math.min(width / 800, height / 600);
         
         this.add.text(width/2, height * 0.3, 'SYSTEM FAILURE', {
@@ -347,13 +355,12 @@ class GameOver extends Phaser.Scene {
 
         this.tweens.add({ targets: retryBtn, scale: 1.1, duration: 800, yoyo: true, repeat: -1 });
 
-        // Touch Input
         this.input.on('pointerdown', () => {
             this.scene.stop();
             this.scene.get('GameScene').scene.restart();
         });
-
-        // PC Input (Space to Restart)
+        
+        // PC Spacebar Restart
         this.input.keyboard.on('keydown-SPACE', () => {
             this.scene.stop();
             this.scene.get('GameScene').scene.restart();
