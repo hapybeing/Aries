@@ -6,8 +6,8 @@ class MainMenu extends Phaser.Scene {
         this.load.image('bg', 'bg.png');
         this.load.image('ground', 'ground.png');
         this.load.image('spike', 'spike.png');
+        this.load.image('hero', 'hero.png'); // NEW HERO
         
-        // AUDIO LOADING
         this.load.audio('music', 'music.mp3');
         this.load.audio('jump', 'jump.mp3');
         this.load.audio('boom', 'boom.mp3');
@@ -15,35 +15,31 @@ class MainMenu extends Phaser.Scene {
 
     create() {
         const { width, height } = this.scale;
-
-        // Background
-        this.bg = this.add.tileSprite(width/2, height/2, width, height, 'bg');
-        this.bg.setTint(0x666666);
-
-        // Title
+        
+        this.bg = this.add.tileSprite(width/2, height/2, width, height, 'bg').setTint(0x666666);
+        
         const title = this.add.text(width/2, height * 0.25, 'ARIES', {
             fontSize: '80px', fontFamily: 'Arial Black', color: '#ffffff'
         }).setOrigin(0.5);
         if (title.postFX) title.postFX.addBloom(0xffffff, 1, 1, 2, 1.2);
 
-        // SHOW HIGH SCORE
+        // High Score
         const highScore = localStorage.getItem('aries_highscore') || 0;
         this.add.text(width/2, height * 0.35, `BEST RUN: ${highScore}m`, {
             fontSize: '24px', fontFamily: 'monospace', color: '#00ffff'
         }).setOrigin(0.5);
 
-        // Menu Text
-        this.add.text(width * 0.25, height * 0.58, 'JUMP', { fontSize: '32px', fontFamily: 'Arial Black', color: '#ffffff' }).setOrigin(0.5);
-        this.add.text(width * 0.75, height * 0.58, 'ATTACK', { fontSize: '32px', fontFamily: 'Arial Black', color: '#ff0055' }).setOrigin(0.5);
+        // Controls Visuals
+        this.add.rectangle(width/2, height * 0.6, 2, 80, 0x00ffff, 0.3);
+        this.add.text(width * 0.25, height * 0.6, 'JUMP', { fontSize: '28px', fontFamily: 'Arial Black', color: '#ffffff' }).setOrigin(0.5);
+        this.add.text(width * 0.75, height * 0.6, 'ATTACK', { fontSize: '28px', fontFamily: 'Arial Black', color: '#ff0055' }).setOrigin(0.5);
 
         const startBtn = this.add.text(width/2, height * 0.85, '[ TAP TO START ]', {
             fontSize: '24px', fontFamily: 'monospace', color: '#ffffff'
         }).setOrigin(0.5);
         this.tweens.add({ targets: startBtn, alpha: 0.5, duration: 800, yoyo: true, repeat: -1 });
 
-        this.input.on('pointerdown', () => {
-            this.scene.start('GameScene');
-        });
+        this.input.on('pointerdown', () => this.scene.start('GameScene'));
     }
 }
 
@@ -55,7 +51,6 @@ class GameScene extends Phaser.Scene {
         const { width, height } = this.scale;
 
         // 1. SETUP AUDIO
-        // Check if music is already playing to avoid double audio
         if (!this.sound.get('music')) {
             this.music = this.sound.add('music', { loop: true, volume: 0.5 });
             this.music.play();
@@ -67,22 +62,24 @@ class GameScene extends Phaser.Scene {
         this.bg = this.add.tileSprite(width/2, height/2, width, height, 'bg').setScrollFactor(0);
         
         if (this.cameras.main.postFX) {
-            this.cameras.main.postFX.addBloom(0xffffff, 0.8, 0.8, 1.5, 1.1);
+            this.cameras.main.postFX.addBloom(0xffffff, 0.6, 0.6, 1.2, 1.0);
             this.cameras.main.postFX.addVignette(0.5, 0.5, 0.9);
         }
 
-        // 3. PLAYER
-        const gfx = this.make.graphics({x:0, y:0, add: false});
-        gfx.fillStyle(0xffffff); gfx.fillCircle(16, 16, 16);
-        gfx.generateTexture('player', 32, 32);
-
-        this.player = this.physics.add.sprite(200, 300, 'player');
+        // 3. THE HERO (Replaces the circle)
+        this.player = this.physics.add.sprite(200, 300, 'hero');
+        // Scale down if the image is too big
+        this.player.setScale(0.5); 
+        // Make the hit-box smaller than the image (for fairness)
+        this.player.body.setCircle(this.player.width * 0.3, this.player.width * 0.2, this.player.height * 0.2);
+        
         this.player.setGravityY(1400);
         this.player.setDepth(10);
         
-        this.add.particles(0, 0, 'player', {
-            speed: 10, scale: { start: 0.5, end: 0 }, alpha: { start: 0.5, end: 0 },
-            lifespan: 300, blendMode: 'ADD', follow: this.player
+        // Hero Glow Trail
+        this.add.particles(0, 0, 'hero', {
+            speed: 10, scale: { start: 0.4, end: 0 }, alpha: { start: 0.3, end: 0 },
+            lifespan: 200, blendMode: 'ADD', follow: this.player
         }).setDepth(9);
 
         // 4. GROUPS
@@ -97,16 +94,15 @@ class GameScene extends Phaser.Scene {
         
         this.physics.add.overlap(this.player, this.spikes, (player, spike) => {
             if (this.isDashing) {
-                // SMASH!
+                // SMASH
                 this.cameras.main.shake(100, 0.01);
                 spike.destroy();
                 this.score += 50; 
-                this.boomSound.play(); // Sound Effect!
+                this.boomSound.play();
                 
-                // Visual Burst
-                const burst = this.add.circle(spike.x, spike.y, 40, 0xff0000);
-                this.tweens.add({targets: burst, scale: 2, alpha: 0, duration: 200, onComplete: () => burst.destroy()});
-                
+                // Explosion Visual
+                const burst = this.add.circle(spike.x, spike.y, 50, 0xff0000);
+                this.tweens.add({targets: burst, scale: 2.5, alpha: 0, duration: 250, onComplete: () => burst.destroy()});
             } else {
                 this.gameOver();
             }
@@ -118,6 +114,7 @@ class GameScene extends Phaser.Scene {
             else this.dash();
         });
 
+        // 7. CAMERA & SPEED
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
         this.cameras.main.setFollowOffset(-200, 150);
 
@@ -125,18 +122,19 @@ class GameScene extends Phaser.Scene {
             fontSize: '40px', fontFamily: 'Arial Black', color: '#ffffff'
         }).setScrollFactor(0).setDepth(20);
 
+        // GAME VARIABLES
         this.jumps = 0;
         this.isDashing = false;
         this.isDead = false;
         this.score = 0;
+        this.gameSpeed = 400; // Base speed
+        this.speedLevel = 0;   // Difficulty tracker
     }
 
     spawnPlatform(canHaveSpikes) {
         const ground = this.platforms.create(this.nextPlatformX, this.scale.height - 50, 'ground');
-        ground.displayWidth = 125; 
-        ground.displayHeight = 100;
-        ground.refreshBody(); 
-        ground.setDepth(10);
+        ground.displayWidth = 125; ground.displayHeight = 100;
+        ground.refreshBody(); ground.setDepth(10);
 
         if (canHaveSpikes && Math.random() < 0.4) {
             const spikeX = this.nextPlatformX + Phaser.Math.Between(-30, 30);
@@ -154,8 +152,7 @@ class GameScene extends Phaser.Scene {
         if (this.jumps < 2 && !this.isDead) {
             this.player.setVelocityY(-700);
             this.jumps++;
-            this.jumpSound.play(); // Sound Effect!
-            this.cameras.main.shake(50, 0.005);
+            this.jumpSound.play();
         }
     }
 
@@ -163,8 +160,8 @@ class GameScene extends Phaser.Scene {
         if (!this.isDashing && !this.isDead) {
             this.isDashing = true;
             this.player.setGravityY(-1400);
-            this.player.setVelocityX(900);
-            this.jumpSound.play({ rate: 1.5 }); // Higher pitch for dash
+            this.player.setVelocityX(this.gameSpeed + 500); // Dash is always faster than run
+            this.jumpSound.play({ rate: 1.5 });
             this.cameras.main.flash(50, 0, 255, 255);
             
             this.time.delayedCall(250, () => {
@@ -177,15 +174,33 @@ class GameScene extends Phaser.Scene {
     update() {
         if (this.isDead) return;
 
-        if (!this.isDashing) this.player.setVelocityX(400);
+        // 1. DYNAMIC SPEED (The Adrenaline)
+        // Every 500 score, increase speed
+        const currentDistance = Math.floor(this.player.x / 100);
+        const newSpeedLevel = Math.floor(currentDistance / 500);
+        
+        if (newSpeedLevel > this.speedLevel) {
+            this.speedLevel = newSpeedLevel;
+            this.gameSpeed += 40; // Increase speed
+            this.cameras.main.zoomTo(Math.max(0.8, 1 - (this.speedLevel * 0.05)), 1000); // Zoom out slowly
+        }
+
+        // Apply Speed
+        if (!this.isDashing) {
+            this.player.setVelocityX(this.gameSpeed);
+        }
+
+        // 2. Parallax
         this.bg.tilePositionX = this.cameras.main.scrollX * 0.5;
 
-        if (this.player.x > this.nextPlatformX - 1000) this.spawnPlatform(true);
+        // 3. Generator (Spawns further ahead as we get faster)
+        if (this.player.x > this.nextPlatformX - 1500) this.spawnPlatform(true);
 
-        // Score logic
-        const currentScore = Math.floor(this.player.x / 100) + this.score;
-        this.scoreText.setText(currentScore);
+        // 4. Score
+        const totalScore = currentDistance + this.score;
+        this.scoreText.setText(totalScore);
 
+        // Cleanup
         this.platforms.children.each(c => { if(c.x < this.player.x - 800) c.destroy(); });
         this.spikes.children.each(c => { if(c.x < this.player.x - 800) c.destroy(); });
         
@@ -197,14 +212,12 @@ class GameScene extends Phaser.Scene {
         this.isDead = true;
         this.cameras.main.shake(500, 0.02);
         this.player.setTint(0xff0055);
-        this.boomSound.play(); // Crash sound
+        this.boomSound.play(); 
         
-        // SAVE HIGH SCORE
-        const currentScore = Math.floor(this.player.x / 100) + this.score;
+        // Save Score
+        const totalScore = Math.floor(this.player.x / 100) + this.score;
         const best = localStorage.getItem('aries_highscore') || 0;
-        if (currentScore > best) {
-            localStorage.setItem('aries_highscore', currentScore);
-        }
+        if (totalScore > best) localStorage.setItem('aries_highscore', totalScore);
 
         this.time.delayedCall(1000, () => this.scene.start('MainMenu'));
     }
