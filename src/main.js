@@ -71,30 +71,24 @@ class GameScene extends Phaser.Scene {
         this.player.setScale(0.15); 
         this.player.setGravityY(1400);
         this.player.setDepth(10);
-        // Corrected Hitbox from Phase 13
         this.player.body.setSize(this.player.width * 0.4, this.player.height * 0.5);
         this.player.body.setOffset(this.player.width * 0.3, this.player.height * 0.25);
 
-        // Trail & Dust
+        // Particles
         this.trail = this.add.particles(0, 0, 'hero', {
             speed: 10, scale: { start: 0.15, end: 0 }, alpha: { start: 0.3, end: 0 },
             lifespan: 200, blendMode: 'ADD', follow: this.player, followOffset: { x: -20, y: 0 } 
         }).setDepth(9);
 
-        // --- NEW: DUST PARTICLES ---
-        // We use a simple white circle for dust
+        // Dust
         const dustGfx = this.make.graphics({x:0, y:0, add:false});
         dustGfx.fillStyle(0xffffff); dustGfx.fillCircle(4,4,4);
         dustGfx.generateTexture('dust', 8, 8);
 
         this.dust = this.add.particles(0, 0, 'dust', {
-            speed: { min: -100, max: 0 }, // Shoot backwards
-            angle: { min: 180, max: 200 },
-            scale: { start: 0.5, end: 0 },
-            alpha: { start: 0.5, end: 0 },
-            lifespan: 300,
-            gravityY: -100,
-            emitting: false // Only emit when running
+            speed: { min: -100, max: 0 }, angle: { min: 180, max: 200 },
+            scale: { start: 0.5, end: 0 }, alpha: { start: 0.5, end: 0 },
+            lifespan: 300, gravityY: -100, emitting: false
         });
 
         // Groups
@@ -106,8 +100,7 @@ class GameScene extends Phaser.Scene {
 
         // Collisions
         this.physics.add.collider(this.player, this.platforms, () => { 
-            this.jumps = 0; 
-            this.isFlipping = false;
+            this.jumps = 0; this.isFlipping = false;
         });
         
         this.physics.add.overlap(this.player, this.spikes, (player, spike) => {
@@ -119,17 +112,17 @@ class GameScene extends Phaser.Scene {
                 const burst = this.add.circle(spike.x, spike.y, 50, 0xff0000);
                 this.tweens.add({targets: burst, scale: 2.5, alpha: 0, duration: 250, onComplete: () => burst.destroy()});
             } else {
-                this.gameOver();
+                this.die(); // Changed from gameOver to die
             }
         });
 
         // Controls
         this.input.on('pointerdown', (pointer) => {
+            if (this.isDead) return;
             if (pointer.x < width / 2) this.jump();
             else this.dash();
         });
 
-        // Camera
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
         this.cameras.main.setFollowOffset(-200, 150);
 
@@ -137,7 +130,6 @@ class GameScene extends Phaser.Scene {
             fontSize: '40px', fontFamily: 'Arial Black', color: '#ffffff'
         }).setScrollFactor(0).setDepth(20);
 
-        // Variables
         this.jumps = 0;
         this.isDashing = false;
         this.isDead = false;
@@ -146,10 +138,8 @@ class GameScene extends Phaser.Scene {
         this.gameSpeed = 400;
         this.speedLevel = 0;
 
-        // Run Anim
         this.tweens.add({
-            targets: this.player,
-            scaleY: 0.14, scaleX: 0.16, duration: 150, yoyo: true, repeat: -1
+            targets: this.player, scaleY: 0.14, scaleX: 0.16, duration: 150, yoyo: true, repeat: -1
         });
     }
 
@@ -175,12 +165,10 @@ class GameScene extends Phaser.Scene {
             this.player.setVelocityY(-700);
             this.jumps++;
             this.jumpSound.play();
-            
             if (this.jumps === 2) {
                 this.isFlipping = true;
                 this.tweens.add({
-                    targets: this.player,
-                    angle: 360, duration: 600, ease: 'Cubic.easeOut',
+                    targets: this.player, angle: 360, duration: 600, ease: 'Cubic.easeOut',
                     onComplete: () => { this.player.setAngle(0); }
                 });
             }
@@ -205,7 +193,6 @@ class GameScene extends Phaser.Scene {
     update() {
         if (this.isDead) return;
 
-        // Speed Logic
         const currentDistance = Math.floor(this.player.x / 100);
         const newSpeedLevel = Math.floor(currentDistance / 500);
         if (newSpeedLevel > this.speedLevel) {
@@ -216,11 +203,9 @@ class GameScene extends Phaser.Scene {
 
         if (!this.isDashing) this.player.setVelocityX(this.gameSpeed);
         
-        // Posture & Dust Logic
         if (!this.isFlipping) {
             if (this.player.body.touching.down) {
                 this.player.setAngle(0); 
-                // Emit Dust when running on ground
                 this.dust.emitParticleAt(this.player.x - 20, this.player.y + 35);
             } else {
                 if (this.player.body.velocity.y < 0) this.player.setAngle(-15);
@@ -230,50 +215,66 @@ class GameScene extends Phaser.Scene {
 
         this.bg.tilePositionX = this.cameras.main.scrollX * 0.5;
         if (this.player.x > this.nextPlatformX - 1500) this.spawnPlatform(true);
-
         const totalScore = currentDistance + this.score;
         this.scoreText.setText(totalScore);
 
         this.platforms.children.each(c => { if(c.x < this.player.x - 800) c.destroy(); });
         this.spikes.children.each(c => { if(c.x < this.player.x - 800) c.destroy(); });
         
-        if (this.player.y > this.scale.height + 100) this.gameOver();
+        if (this.player.y > this.scale.height + 100) this.die();
     }
 
-    gameOver() {
+    die() {
         if (this.isDead) return;
         this.isDead = true;
-        this.cameras.main.shake(500, 0.02);
-        this.player.setTint(0xff0055);
+        this.physics.pause(); // Freeze physics
         this.boomSound.play(); 
+        this.cameras.main.shake(500, 0.02);
+
+        // --- NEW: DEATH ANIMATION (SHATTER) ---
+        this.player.setVisible(false); // Hide the body
+        this.trail.stop(); // Stop trail
         
-        // Save Score
+        // Explode into 50 pieces
+        const explosion = this.add.particles(0, 0, 'hero', {
+            x: this.player.x, y: this.player.y,
+            speed: { min: 50, max: 200 },
+            angle: { min: 0, max: 360 },
+            scale: { start: 0.1, end: 0 },
+            lifespan: 800,
+            gravityY: 1000,
+            quantity: 50,
+            emitting: false
+        });
+        explosion.explode();
+        // -------------------------------------
+
         const totalScore = Math.floor(this.player.x / 100) + this.score;
         const best = localStorage.getItem('aries_highscore') || 0;
         if (totalScore > best) localStorage.setItem('aries_highscore', totalScore);
 
-        // --- GO TO GAME OVER SCENE ---
-        // Pass the score to the next scene
+        // --- NEW: LAUNCH OVERLAY (Transparent) ---
+        // We PAUSE this scene (so it stays visible) and LAUNCH the menu on top
         this.time.delayedCall(1000, () => {
-            this.scene.start('GameOver', { score: totalScore, highscore: Math.max(totalScore, best) });
+            this.scene.pause(); 
+            this.scene.launch('GameOver', { score: totalScore, highscore: Math.max(totalScore, best) });
         });
     }
 }
 
-// --- SCENE 3: GAME OVER ---
+// --- SCENE 3: GAME OVER (Now Transparent) ---
 class GameOver extends Phaser.Scene {
     constructor() { super('GameOver'); }
 
     create(data) {
         const { width, height } = this.scale;
         
-        // Dark overlay
-        this.add.rectangle(width/2, height/2, width, height, 0x000000).setAlpha(0.9);
+        // Semi-transparent black overlay
+        this.add.rectangle(width/2, height/2, width, height, 0x000000).setAlpha(0.8);
 
-        // Text
         this.add.text(width/2, height * 0.3, 'SYSTEM FAILURE', {
             fontSize: '50px', fontFamily: 'Arial Black', color: '#ff0055'
-        }).setOrigin(0.5).setPostPipeline('BloomPostFX'); // Attempt to reuse bloom if possible
+        }).setOrigin(0.5).setPostPipeline('BloomPostFX'); 
 
         this.add.text(width/2, height * 0.45, `SCORE: ${data.score}m`, {
             fontSize: '40px', fontFamily: 'monospace', color: '#ffffff'
@@ -283,7 +284,6 @@ class GameOver extends Phaser.Scene {
             fontSize: '24px', fontFamily: 'monospace', color: '#00ffff'
         }).setOrigin(0.5);
 
-        // Retry Button
         const retryBtn = this.add.text(width/2, height * 0.75, '[ TAP TO RETRY ]', {
             fontSize: '30px', fontFamily: 'monospace', color: '#ffffff'
         }).setOrigin(0.5);
@@ -291,12 +291,13 @@ class GameOver extends Phaser.Scene {
         this.tweens.add({ targets: retryBtn, scale: 1.1, duration: 800, yoyo: true, repeat: -1 });
 
         this.input.on('pointerdown', () => {
-            this.scene.start('GameScene');
+            // STOP this scene and RESUME/RESTART the game scene
+            this.scene.stop();
+            this.scene.get('GameScene').scene.restart();
         });
     }
 }
 
-// CONFIG
 const config = {
     type: Phaser.AUTO,
     width: window.innerWidth,
@@ -304,6 +305,6 @@ const config = {
     backgroundColor: '#000000',
     scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH },
     physics: { default: 'arcade', arcade: { gravity: { y: 1400 }, debug: false } },
-    scene: [MainMenu, GameScene, GameOver] // Added GameOver scene
+    scene: [MainMenu, GameScene, GameOver]
 };
 const game = new Phaser.Game(config);
