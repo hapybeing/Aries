@@ -3,58 +3,38 @@ class MainMenu extends Phaser.Scene {
     constructor() { super('MainMenu'); }
 
     preload() {
-        // LOAD THE BACKGROUND IMAGE
-        // We assume the file is named 'bg.png' in the main folder
         this.load.image('bg', 'bg.png');
+        this.load.image('ground', 'ground.png');
+        this.load.image('spike', 'spike.png');
     }
 
     create() {
         const { width, height } = this.scale;
 
-        // 1. BACKGROUND (Static in Menu)
-        // We use setScrollFactor(0) to lock it, but here we just place it.
-        // We use a TileSprite so it can cover any screen size
+        // Background
         this.bg = this.add.tileSprite(width/2, height/2, width, height, 'bg');
-        // Dim the background slightly so text pops
-        this.bg.setTint(0x888888); 
+        this.bg.setTint(0x666666); // Darker in menu
 
-        // 2. TITLE (With heavy Bloom)
+        // Title
         const title = this.add.text(width/2, height * 0.25, 'ARIES', {
             fontSize: '80px', fontFamily: 'Arial Black', color: '#ffffff'
         }).setOrigin(0.5);
-        
         if (title.postFX) title.postFX.addBloom(0xffffff, 1, 1, 2, 1.2);
 
-        // 3. THE NEW CONTROLS GUIDE (Clearer)
-        // We draw a visual line to split the screen
-        const line = this.add.rectangle(width/2, height * 0.55, 2, 100, 0x00ffff, 0.5);
+        // Guide Lines
+        this.add.rectangle(width/2, height * 0.55, 2, 100, 0x00ffff, 0.5);
         
-        this.add.text(width * 0.25, height * 0.5, 'LEFT SIDE', {
-            fontSize: '24px', fontFamily: 'monospace', color: '#00ffff'
-        }).setOrigin(0.5);
-        
-        this.add.text(width * 0.25, height * 0.58, 'JUMP / FLY', {
-            fontSize: '32px', fontFamily: 'Arial Black', color: '#ffffff'
-        }).setOrigin(0.5);
+        // Text
+        this.add.text(width * 0.25, height * 0.58, 'JUMP', { fontSize: '32px', fontFamily: 'Arial Black', color: '#ffffff' }).setOrigin(0.5);
+        this.add.text(width * 0.75, height * 0.58, 'ATTACK', { fontSize: '32px', fontFamily: 'Arial Black', color: '#ff0055' }).setOrigin(0.5);
 
-        this.add.text(width * 0.75, height * 0.5, 'RIGHT SIDE', {
-            fontSize: '24px', fontFamily: 'monospace', color: '#ff0055' // Reddish for dash
+        // Start
+        const startBtn = this.add.text(width/2, height * 0.85, '[ TAP TO START ]', {
+            fontSize: '24px', fontFamily: 'monospace', color: '#ffffff'
         }).setOrigin(0.5);
-        
-        this.add.text(width * 0.75, height * 0.58, 'DASH ATTACK', {
-            fontSize: '32px', fontFamily: 'Arial Black', color: '#ffffff'
-        }).setOrigin(0.5);
-
-        // 4. START PROMPT
-        const startBtn = this.add.text(width/2, height * 0.85, '[ TAP ANYWHERE TO START ]', {
-            fontSize: '20px', fontFamily: 'monospace', color: '#ffffff'
-        }).setOrigin(0.5);
-
         this.tweens.add({ targets: startBtn, alpha: 0.5, duration: 800, yoyo: true, repeat: -1 });
 
-        this.input.on('pointerdown', () => {
-            this.scene.start('GameScene');
-        });
+        this.input.on('pointerdown', () => this.scene.start('GameScene'));
     }
 }
 
@@ -62,68 +42,69 @@ class MainMenu extends Phaser.Scene {
 class GameScene extends Phaser.Scene {
     constructor() { super('GameScene'); }
 
-    // No preload needed here, assets are global once loaded in Menu
-
     create() {
         const { width, height } = this.scale;
 
-        // 1. PARALLAX BACKGROUND
-        // TileSprite allows us to scroll the image infinitely
-        this.bg = this.add.tileSprite(width/2, height/2, width, height, 'bg');
-        this.bg.setScrollFactor(0); // Fixes it to camera
+        // 1. SETUP WORLD
+        this.bg = this.add.tileSprite(width/2, height/2, width, height, 'bg').setScrollFactor(0);
         
-        // 2. POST-PROCESSING
         if (this.cameras.main.postFX) {
             this.cameras.main.postFX.addBloom(0xffffff, 0.8, 0.8, 1.5, 1.1);
             this.cameras.main.postFX.addVignette(0.5, 0.5, 0.9);
         }
 
-        // 3. PLAYER GENERATION (Procedural)
+        // 2. PLAYER (Still procedural for now - fits the "Energy Being" theme)
         const gfx = this.make.graphics({x:0, y:0, add: false});
         gfx.fillStyle(0xffffff); gfx.fillCircle(16, 16, 16);
         gfx.generateTexture('player', 32, 32);
 
-        gfx.clear(); gfx.fillStyle(0x00ffff); gfx.fillRect(0, 0, 32, 32);
-        gfx.generateTexture('block', 32, 32);
-
-        gfx.clear(); gfx.fillStyle(0xff0055); // Matching the Dash text color
-        gfx.beginPath(); gfx.moveTo(16,0); gfx.lineTo(32,32); gfx.lineTo(0,32); gfx.closePath();
-        gfx.fillPath();
-        gfx.generateTexture('spike', 32, 32);
-
-        // 4. ENTITIES
         this.player = this.physics.add.sprite(200, 300, 'player');
-        this.player.setGravityY(1400); 
-        this.player.setDepth(10); // Ensure player is in front of background
+        this.player.setGravityY(1400);
+        this.player.setDepth(10);
         
-        // Trail
         this.add.particles(0, 0, 'player', {
             speed: 10, scale: { start: 0.5, end: 0 }, alpha: { start: 0.5, end: 0 },
             lifespan: 300, blendMode: 'ADD', follow: this.player
         }).setDepth(9);
 
+        // 3. GROUPS
         this.platforms = this.physics.add.staticGroup();
         this.spikes = this.physics.add.staticGroup();
 
-        // Level Setup
+        // 4. GENERATE LEVEL
         this.nextPlatformX = 0;
         for(let i=0; i<15; i++) this.spawnPlatform(false);
 
-        // Colliders
+        // 5. COLLISIONS (The Smart Logic)
         this.physics.add.collider(this.player, this.platforms, () => { this.jumps = 0; });
-        this.physics.add.collider(this.player, this.spikes, () => { this.gameOver(); });
+        
+        // The "Risk/Reward" Mechanic
+        this.physics.add.overlap(this.player, this.spikes, (player, spike) => {
+            if (this.isDashing) {
+                // SMASH!
+                this.cameras.main.shake(100, 0.01);
+                spike.destroy();
+                this.score += 50; // Bonus points
+                
+                // Explosion effect (Simple flash for now)
+                const burst = this.add.circle(spike.x, spike.y, 30, 0xff0000);
+                this.tweens.add({targets: burst, scale: 2, alpha: 0, duration: 200, onComplete: () => burst.destroy()});
+                
+            } else {
+                // DIE
+                this.gameOver();
+            }
+        });
 
-        // Controls
+        // 6. CONTROLS
         this.input.on('pointerdown', (pointer) => {
             if (pointer.x < width / 2) this.jump();
             else this.dash();
         });
 
-        // Camera
         this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
         this.cameras.main.setFollowOffset(-200, 150);
 
-        // UI
         this.scoreText = this.add.text(50, 50, '0', {
             fontSize: '40px', fontFamily: 'Arial Black', color: '#ffffff'
         }).setScrollFactor(0).setDepth(20);
@@ -131,18 +112,36 @@ class GameScene extends Phaser.Scene {
         this.jumps = 0;
         this.isDashing = false;
         this.isDead = false;
+        this.score = 0;
     }
 
     spawnPlatform(canHaveSpikes) {
-        const ground = this.platforms.create(this.nextPlatformX, this.scale.height - 50, 'block');
-        ground.setScale(4, 1).refreshBody(); 
-        ground.setDepth(10); // In front of BG
+        // Use the new 'ground' image
+        const ground = this.platforms.create(this.nextPlatformX, this.scale.height - 50, 'ground');
+        
+        // Scale to fit our grid (approx 120px wide logic)
+        // We assume the image is roughly square, we stretch it horizontally
+        ground.displayWidth = 125; 
+        ground.displayHeight = 100;
+        ground.refreshBody(); 
+        ground.setDepth(10);
 
+        // Spawn Spikes
         if (canHaveSpikes && Math.random() < 0.4) {
-            const spikeX = this.nextPlatformX + Phaser.Math.Between(-50, 50);
-            const spike = this.spikes.create(spikeX, this.scale.height - 85, 'spike');
-            spike.setScale(1).refreshBody();
+            const spikeX = this.nextPlatformX + Phaser.Math.Between(-30, 30);
+            // Use the new 'spike' image
+            const spike = this.spikes.create(spikeX, this.scale.height - 110, 'spike');
+            
+            // Adjust spike size
+            spike.displayWidth = 60;
+            spike.displayHeight = 60;
+            spike.refreshBody();
             spike.setDepth(10);
+            
+            // Add a "Warning Glow" behind the spike
+            const glow = this.add.circle(spikeX, this.scale.height - 100, 30, 0xff0000, 0.3);
+            this.tweens.add({ targets: glow, alpha: 0.1, scale: 1.5, duration: 500, yoyo: true, repeat: -1 });
+            // Cleanup glow when spike is gone? We'll leave it simple for now.
         }
         this.nextPlatformX += 120;
     }
@@ -160,9 +159,9 @@ class GameScene extends Phaser.Scene {
             this.isDashing = true;
             this.player.setGravityY(-1400);
             this.player.setVelocityX(900);
-            this.cameras.main.flash(50, 0, 255, 255); // Cyan flash
+            this.cameras.main.flash(50, 0, 255, 255);
             
-            this.time.delayedCall(200, () => {
+            this.time.delayedCall(250, () => {
                 this.player.setGravityY(1400);
                 this.isDashing = false;
             });
@@ -172,23 +171,23 @@ class GameScene extends Phaser.Scene {
     update() {
         if (this.isDead) return;
 
-        // 1. Move Player
         if (!this.isDashing) this.player.setVelocityX(400);
+        
+        // Parallax
+        this.bg.tilePositionX = this.cameras.main.scrollX * 0.5;
 
-        // 2. PARALLAX EFFECT (The "Award Winning" look)
-        // We move the background texture slowly as the camera moves
-        this.bg.tilePositionX = this.cameras.main.scrollX * 0.5; // Moves at half speed of player
-
-        // 3. Level Generation
+        // Generator
         if (this.player.x > this.nextPlatformX - 1000) this.spawnPlatform(true);
 
-        // 4. Cleanup
+        // Score logic (Distance + Bonuses)
+        const distScore = Math.floor(this.player.x / 100);
+        this.scoreText.setText(distScore + this.score);
+
+        // Cleanup
         this.platforms.children.each(c => { if(c.x < this.player.x - 800) c.destroy(); });
-        this.spikes.children.each(c => { if(c.x < this.player.x - 800) c.destroy(); });
-
+        this.spikes.children.each(c => { if(c.x < this.player.x - 800) c.destroy(); }); // Simple cleanup
+        
         if (this.player.y > this.scale.height + 100) this.gameOver();
-
-        this.scoreText.setText(Math.floor(this.player.x / 100));
     }
 
     gameOver() {
@@ -205,7 +204,7 @@ const config = {
     type: Phaser.AUTO,
     width: window.innerWidth,
     height: window.innerHeight,
-    backgroundColor: '#000000', // Black, so the image sits on top
+    backgroundColor: '#000000',
     scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH },
     physics: { default: 'arcade', arcade: { gravity: { y: 1400 }, debug: false } },
     scene: [MainMenu, GameScene]
