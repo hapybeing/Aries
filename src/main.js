@@ -65,20 +65,19 @@ class GameScene extends Phaser.Scene {
             this.cameras.main.postFX.addVignette(0.5, 0.5, 0.9);
         }
 
-        // --- HERO SURGERY (Fixing the Float) ---
+        // --- HERO SURGERY V2 (Fixing the Float) ---
         this.player = this.physics.add.sprite(200, 300, 'hero');
         this.player.setScale(0.15); 
         this.player.setGravityY(1400);
         this.player.setDepth(10);
 
-        // 1. Shrink the Physics Box to be smaller than the image (Cut off empty space)
-        // We make the box 40% width and 60% height of the full image
-        this.player.body.setSize(this.player.width * 0.4, this.player.height * 0.6);
-        
-        // 2. Offset the box to align with the center/bottom of the sprite
-        this.player.body.setOffset(this.player.width * 0.3, this.player.height * 0.3);
+        // ** THE FIX IS HERE **
+        // We reduce the height (0.5) and move it up (0.25)
+        // This cuts off the bottom 25% of the image from physics
+        this.player.body.setSize(this.player.width * 0.4, this.player.height * 0.5);
+        this.player.body.setOffset(this.player.width * 0.3, this.player.height * 0.25);
 
-        // Trail Effect
+        // Trail
         this.add.particles(0, 0, 'hero', {
             speed: 10, scale: { start: 0.15, end: 0 }, alpha: { start: 0.3, end: 0 },
             lifespan: 200, blendMode: 'ADD', follow: this.player,
@@ -95,7 +94,7 @@ class GameScene extends Phaser.Scene {
         // Collisions
         this.physics.add.collider(this.player, this.platforms, () => { 
             this.jumps = 0; 
-            this.isFlipping = false; // Stop flipping on land
+            this.isFlipping = false;
         });
         
         this.physics.add.overlap(this.player, this.spikes, (player, spike) => {
@@ -133,12 +132,11 @@ class GameScene extends Phaser.Scene {
         this.gameSpeed = 400;
         this.speedLevel = 0;
 
-        // --- RUNNING ANIMATION (Squash & Stretch) ---
-        // This makes him "breath" while running
+        // Running Animation
         this.tweens.add({
             targets: this.player,
-            scaleY: 0.14, // Squish down slightly (from 0.15)
-            scaleX: 0.16, // Stretch wide slightly
+            scaleY: 0.14,
+            scaleX: 0.16,
             duration: 150,
             yoyo: true,
             repeat: -1
@@ -168,7 +166,6 @@ class GameScene extends Phaser.Scene {
             this.jumps++;
             this.jumpSound.play();
             
-            // --- FLIP LOGIC ---
             if (this.jumps === 2) {
                 this.isFlipping = true;
                 this.tweens.add({
@@ -176,7 +173,7 @@ class GameScene extends Phaser.Scene {
                     angle: 360,
                     duration: 600,
                     ease: 'Cubic.easeOut',
-                    onComplete: () => { this.player.setAngle(0); } // Reset after flip
+                    onComplete: () => { this.player.setAngle(0); }
                 });
             }
         }
@@ -190,7 +187,6 @@ class GameScene extends Phaser.Scene {
             this.jumpSound.play({ rate: 1.5 });
             this.cameras.main.flash(50, 0, 255, 255);
             
-            // Dash Pose
             this.tweens.add({ targets: this.player, angle: 20, duration: 100, yoyo: true });
 
             this.time.delayedCall(250, () => {
@@ -214,12 +210,11 @@ class GameScene extends Phaser.Scene {
 
         if (!this.isDashing) this.player.setVelocityX(this.gameSpeed);
         
-        // --- ANIMATION CONTROLLER ---
+        // Posture Logic
         if (!this.isFlipping) {
             if (this.player.body.touching.down) {
-                this.player.setAngle(0); // Run straight
+                this.player.setAngle(0); 
             } else {
-                // Lean into jump/fall
                 if (this.player.body.velocity.y < 0) this.player.setAngle(-15);
                 else this.player.setAngle(10);
             }
@@ -252,14 +247,13 @@ class GameScene extends Phaser.Scene {
     }
 }
 
-// CONFIG
 const config = {
     type: Phaser.AUTO,
     width: window.innerWidth,
     height: window.innerHeight,
     backgroundColor: '#000000',
     scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH },
-    physics: { default: 'arcade', arcade: { gravity: { y: 1400 }, debug: false } }, // Set debug: true to see the red box if still floating!
+    physics: { default: 'arcade', arcade: { gravity: { y: 1400 }, debug: false } },
     scene: [MainMenu, GameScene]
 };
 const game = new Phaser.Game(config);
