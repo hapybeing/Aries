@@ -27,6 +27,7 @@ class MainMenu extends Phaser.Scene {
             fontSize: '24px', fontFamily: 'monospace', color: '#00ffff'
         }).setOrigin(0.5);
 
+        // Instructions
         const guideY = height * 0.55;
         this.add.rectangle(width/2, guideY + 20, 2, 120, 0x00ffff, 0.3);
         this.add.text(width * 0.25, guideY - 30, 'TAP LEFT', { fontSize: '20px', fontFamily: 'monospace', color: '#00ffff' }).setOrigin(0.5);
@@ -65,24 +66,36 @@ class GameScene extends Phaser.Scene {
             this.cameras.main.postFX.addVignette(0.5, 0.5, 0.9);
         }
 
-        // --- HERO SURGERY V2 (Fixing the Float) ---
+        // Hero
         this.player = this.physics.add.sprite(200, 300, 'hero');
         this.player.setScale(0.15); 
         this.player.setGravityY(1400);
         this.player.setDepth(10);
-
-        // ** THE FIX IS HERE **
-        // We reduce the height (0.5) and move it up (0.25)
-        // This cuts off the bottom 25% of the image from physics
+        // Corrected Hitbox from Phase 13
         this.player.body.setSize(this.player.width * 0.4, this.player.height * 0.5);
         this.player.body.setOffset(this.player.width * 0.3, this.player.height * 0.25);
 
-        // Trail
-        this.add.particles(0, 0, 'hero', {
+        // Trail & Dust
+        this.trail = this.add.particles(0, 0, 'hero', {
             speed: 10, scale: { start: 0.15, end: 0 }, alpha: { start: 0.3, end: 0 },
-            lifespan: 200, blendMode: 'ADD', follow: this.player,
-            followOffset: { x: -20, y: 0 } 
+            lifespan: 200, blendMode: 'ADD', follow: this.player, followOffset: { x: -20, y: 0 } 
         }).setDepth(9);
+
+        // --- NEW: DUST PARTICLES ---
+        // We use a simple white circle for dust
+        const dustGfx = this.make.graphics({x:0, y:0, add:false});
+        dustGfx.fillStyle(0xffffff); dustGfx.fillCircle(4,4,4);
+        dustGfx.generateTexture('dust', 8, 8);
+
+        this.dust = this.add.particles(0, 0, 'dust', {
+            speed: { min: -100, max: 0 }, // Shoot backwards
+            angle: { min: 180, max: 200 },
+            scale: { start: 0.5, end: 0 },
+            alpha: { start: 0.5, end: 0 },
+            lifespan: 300,
+            gravityY: -100,
+            emitting: false // Only emit when running
+        });
 
         // Groups
         this.platforms = this.physics.add.staticGroup();
@@ -124,6 +137,7 @@ class GameScene extends Phaser.Scene {
             fontSize: '40px', fontFamily: 'Arial Black', color: '#ffffff'
         }).setScrollFactor(0).setDepth(20);
 
+        // Variables
         this.jumps = 0;
         this.isDashing = false;
         this.isDead = false;
@@ -132,14 +146,10 @@ class GameScene extends Phaser.Scene {
         this.gameSpeed = 400;
         this.speedLevel = 0;
 
-        // Running Animation
+        // Run Anim
         this.tweens.add({
             targets: this.player,
-            scaleY: 0.14,
-            scaleX: 0.16,
-            duration: 150,
-            yoyo: true,
-            repeat: -1
+            scaleY: 0.14, scaleX: 0.16, duration: 150, yoyo: true, repeat: -1
         });
     }
 
@@ -170,9 +180,7 @@ class GameScene extends Phaser.Scene {
                 this.isFlipping = true;
                 this.tweens.add({
                     targets: this.player,
-                    angle: 360,
-                    duration: 600,
-                    ease: 'Cubic.easeOut',
+                    angle: 360, duration: 600, ease: 'Cubic.easeOut',
                     onComplete: () => { this.player.setAngle(0); }
                 });
             }
@@ -186,9 +194,7 @@ class GameScene extends Phaser.Scene {
             this.player.setVelocityX(this.gameSpeed + 500);
             this.jumpSound.play({ rate: 1.5 });
             this.cameras.main.flash(50, 0, 255, 255);
-            
             this.tweens.add({ targets: this.player, angle: 20, duration: 100, yoyo: true });
-
             this.time.delayedCall(250, () => {
                 this.player.setGravityY(1400);
                 this.isDashing = false;
@@ -210,10 +216,12 @@ class GameScene extends Phaser.Scene {
 
         if (!this.isDashing) this.player.setVelocityX(this.gameSpeed);
         
-        // Posture Logic
+        // Posture & Dust Logic
         if (!this.isFlipping) {
             if (this.player.body.touching.down) {
                 this.player.setAngle(0); 
+                // Emit Dust when running on ground
+                this.dust.emitParticleAt(this.player.x - 20, this.player.y + 35);
             } else {
                 if (this.player.body.velocity.y < 0) this.player.setAngle(-15);
                 else this.player.setAngle(10);
@@ -239,14 +247,56 @@ class GameScene extends Phaser.Scene {
         this.player.setTint(0xff0055);
         this.boomSound.play(); 
         
+        // Save Score
         const totalScore = Math.floor(this.player.x / 100) + this.score;
         const best = localStorage.getItem('aries_highscore') || 0;
         if (totalScore > best) localStorage.setItem('aries_highscore', totalScore);
 
-        this.time.delayedCall(1000, () => this.scene.start('MainMenu'));
+        // --- GO TO GAME OVER SCENE ---
+        // Pass the score to the next scene
+        this.time.delayedCall(1000, () => {
+            this.scene.start('GameOver', { score: totalScore, highscore: Math.max(totalScore, best) });
+        });
     }
 }
 
+// --- SCENE 3: GAME OVER ---
+class GameOver extends Phaser.Scene {
+    constructor() { super('GameOver'); }
+
+    create(data) {
+        const { width, height } = this.scale;
+        
+        // Dark overlay
+        this.add.rectangle(width/2, height/2, width, height, 0x000000).setAlpha(0.9);
+
+        // Text
+        this.add.text(width/2, height * 0.3, 'SYSTEM FAILURE', {
+            fontSize: '50px', fontFamily: 'Arial Black', color: '#ff0055'
+        }).setOrigin(0.5).setPostPipeline('BloomPostFX'); // Attempt to reuse bloom if possible
+
+        this.add.text(width/2, height * 0.45, `SCORE: ${data.score}m`, {
+            fontSize: '40px', fontFamily: 'monospace', color: '#ffffff'
+        }).setOrigin(0.5);
+
+        this.add.text(width/2, height * 0.55, `BEST: ${data.highscore}m`, {
+            fontSize: '24px', fontFamily: 'monospace', color: '#00ffff'
+        }).setOrigin(0.5);
+
+        // Retry Button
+        const retryBtn = this.add.text(width/2, height * 0.75, '[ TAP TO RETRY ]', {
+            fontSize: '30px', fontFamily: 'monospace', color: '#ffffff'
+        }).setOrigin(0.5);
+
+        this.tweens.add({ targets: retryBtn, scale: 1.1, duration: 800, yoyo: true, repeat: -1 });
+
+        this.input.on('pointerdown', () => {
+            this.scene.start('GameScene');
+        });
+    }
+}
+
+// CONFIG
 const config = {
     type: Phaser.AUTO,
     width: window.innerWidth,
@@ -254,6 +304,6 @@ const config = {
     backgroundColor: '#000000',
     scale: { mode: Phaser.Scale.RESIZE, autoCenter: Phaser.Scale.CENTER_BOTH },
     physics: { default: 'arcade', arcade: { gravity: { y: 1400 }, debug: false } },
-    scene: [MainMenu, GameScene]
+    scene: [MainMenu, GameScene, GameOver] // Added GameOver scene
 };
 const game = new Phaser.Game(config);
